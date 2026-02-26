@@ -2,7 +2,7 @@
 
 A full-stack MERN application for managing hostel rooms and automatically allocating them to students based on capacity and facility requirements.
 
-## 🚀 Live Demo
+## 🚀 Live Demo link - https://smart-room-allocation-system.vercel.app/
 
 - **Frontend:** [Deploy URL here]
 - **Backend API:** [Deploy URL here]
