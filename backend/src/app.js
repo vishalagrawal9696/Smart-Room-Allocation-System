@@ -13,10 +13,15 @@ const app = express();
 app.use(helmet());
 
 // ─── CORS Configuration ─────────────────────────────────────────────────────
+// build list of allowed origins including any domains listed in FRONTEND_URL (comma-separated)
 const allowedOrigins = [
-  process.env.FRONTEND_URL,
   "http://localhost:5173",
   "http://localhost:3000",
+  "https://smart-room-allocation-system.vercel.app/",
+  // FRONTEND_URL can contain one or more origins separated by commas
+  ...(process.env.FRONTEND_URL
+    ? process.env.FRONTEND_URL.split(",").map((u) => u.trim())
+    : []),
 ].filter(Boolean);
 
 app.use(
@@ -25,6 +30,8 @@ app.use(
       // Allow requests with no origin (mobile apps, Postman, curl)
       if (!origin) return callback(null, true);
       if (allowedOrigins.includes(origin)) return callback(null, true);
+      // For debugging, log the rejected origin
+      console.warn(`CORS: Origin ${origin} not allowed`);
       callback(new Error(`CORS: Origin ${origin} not allowed`));
     },
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
