@@ -9,44 +9,43 @@ const AppError = require("./utils/AppError");
 
 const app = express();
 
-// ─── Security Middleware ────────────────────────────────────────────────────
-app.use(helmet());
+// ─── CORS MUST be first — before helmet and everything else ─────────────────
+// Strip trailing slashes from FRONTEND_URL env var entries
+const rawOrigins = process.env.FRONTEND_URL
+  ? process.env.FRONTEND_URL.split(",").map((u) => u.trim().replace(/\/+$/, ""))
+  : [];
 
-// ─── CORS Configuration ─────────────────────────────────────────────────────
-// FRONTEND_URL in Render env vars supports comma-separated origins, e.g.:
-//   https://smart-room-allocation-system.vercel.app,http://localhost:5173
 const allowedOrigins = [
   "http://localhost:5173",
   "http://localhost:3000",
-  // Parse comma-separated origins from env (strips trailing slashes too)
-  ...(process.env.FRONTEND_URL
-    ? process.env.FRONTEND_URL.split(",").map((u) => u.trim().replace(/\/$/, ""))
-    : []),
+  ...rawOrigins,
 ].filter(Boolean);
 
 console.log("✅ CORS allowed origins:", allowedOrigins);
 
-app.use(
-  cors({
-    origin: (origin, callback) => {
-      // Allow requests with no origin (Postman, curl, mobile apps)
-      if (!origin) return callback(null, true);
+const corsOptions = {
+  origin: (origin, callback) => {
+    // No origin = Postman / curl / mobile — always allow
+    if (!origin) return callback(null, true);
+    const normalized = origin.replace(/\/+$/, "");
+    if (allowedOrigins.includes(normalized)) return callback(null, true);
+    console.warn("🚫 CORS blocked origin:", origin);
+    callback(new Error(`CORS: Origin ${origin} not allowed`));
+  },
+  methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"],
+  credentials: true,
+  optionsSuccessStatus: 200, // Some browsers (IE11) choke on 204
+};
 
-      // Normalize incoming origin (strip trailing slash just in case)
-      const normalizedOrigin = origin.replace(/\/$/, "");
+// Handle ALL OPTIONS preflight requests immediately
+app.options("*", cors(corsOptions));
 
-      if (allowedOrigins.includes(normalizedOrigin)) {
-        return callback(null, true);
-      }
+// Apply CORS to all routes
+app.use(cors(corsOptions));
 
-      console.warn(`CORS blocked: ${origin}`);
-      callback(new Error(`CORS: Origin ${origin} not allowed`));
-    },
-    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization"],
-    credentials: true,
-  })
-);
+// ─── Security Middleware (after CORS) ───────────────────────────────────────
+app.use(helmet());
 
 // ─── Rate Limiting ───────────────────────────────────────────────────────────
 const limiter = rateLimit({
@@ -73,6 +72,7 @@ app.get("/health", (req, res) => {
     success: true,
     message: "Server is running",
     timestamp: new Date().toISOString(),
+    allowedOrigins, // Helpful for debugging — remove in final prod if desired
   });
 });
 
