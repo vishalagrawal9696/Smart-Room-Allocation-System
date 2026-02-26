@@ -13,25 +13,33 @@ const app = express();
 app.use(helmet());
 
 // ─── CORS Configuration ─────────────────────────────────────────────────────
-// build list of allowed origins including any domains listed in FRONTEND_URL (comma-separated)
+// FRONTEND_URL in Render env vars supports comma-separated origins, e.g.:
+//   https://smart-room-allocation-system.vercel.app,http://localhost:5173
 const allowedOrigins = [
   "http://localhost:5173",
   "http://localhost:3000",
-  "https://smart-room-allocation-system.vercel.app/",
-  // FRONTEND_URL can contain one or more origins separated by commas
+  // Parse comma-separated origins from env (strips trailing slashes too)
   ...(process.env.FRONTEND_URL
-    ? process.env.FRONTEND_URL.split(",").map((u) => u.trim())
+    ? process.env.FRONTEND_URL.split(",").map((u) => u.trim().replace(/\/$/, ""))
     : []),
 ].filter(Boolean);
+
+console.log("✅ CORS allowed origins:", allowedOrigins);
 
 app.use(
   cors({
     origin: (origin, callback) => {
-      // Allow requests with no origin (mobile apps, Postman, curl)
+      // Allow requests with no origin (Postman, curl, mobile apps)
       if (!origin) return callback(null, true);
-      if (allowedOrigins.includes(origin)) return callback(null, true);
-      // For debugging, log the rejected origin
-      console.warn(`CORS: Origin ${origin} not allowed`);
+
+      // Normalize incoming origin (strip trailing slash just in case)
+      const normalizedOrigin = origin.replace(/\/$/, "");
+
+      if (allowedOrigins.includes(normalizedOrigin)) {
+        return callback(null, true);
+      }
+
+      console.warn(`CORS blocked: ${origin}`);
       callback(new Error(`CORS: Origin ${origin} not allowed`));
     },
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
@@ -42,7 +50,7 @@ app.use(
 
 // ─── Rate Limiting ───────────────────────────────────────────────────────────
 const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
+  windowMs: 15 * 60 * 1000,
   max: 200,
   standardHeaders: true,
   legacyHeaders: false,
@@ -61,7 +69,11 @@ if (process.env.NODE_ENV !== "test") {
 
 // ─── Health Check ─────────────────────────────────────────────────────────────
 app.get("/health", (req, res) => {
-  res.status(200).json({ success: true, message: "Server is running", timestamp: new Date().toISOString() });
+  res.status(200).json({
+    success: true,
+    message: "Server is running",
+    timestamp: new Date().toISOString(),
+  });
 });
 
 // ─── API Routes ───────────────────────────────────────────────────────────────
